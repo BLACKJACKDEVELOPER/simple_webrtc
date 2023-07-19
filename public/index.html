@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Document</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+</head>
+<style>
+	* {
+		color: #fff ;
+	}
+	video {
+		width: 40%;
+		border: 2px solid #000;
+		border-radius: 10px;
+/*		object-fit: cover;
+		object-position: center;*/
+	}
+	.videos {
+		display: flex;
+		flex-direction: row;
+		justify-content: space-around;
+		width: 100%;
+		margin: auto;
+
+	}
+	.btns {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		max-width: 50%;
+		margin: auto;
+		margin-top: 2%;
+	}
+</style>
+<body class="bg-dark">
+	
+<center>
+	<h1>Video Call Communication</h1>
+</center>
+<br>
+<div class="videos">
+	<video poster="https://i.pinimg.com/originals/3d/6a/a9/3d6aa9082f3c9e285df9970dc7b762ac.gif" autoplay id="localVideo"></video>
+	<video poster="https://i.pinimg.com/originals/3d/6a/a9/3d6aa9082f3c9e285df9970dc7b762ac.gif" autoplay id="remoteVideo"></video>
+</div>
+
+<center  class="mt-4 d-flex justify-content-center">
+	<input type="text" placeholder="ID เพื่อนคุณ" id="id" class="form-control w-25">
+	<button class="btn btn-success" onclick="call()">โทร</button>
+</center>
+<center>
+	<h4>ID ของคุณ <span id="myid"></span></h4>
+</center>
+
+
+<div class="modal" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5" id="exampleModalLabel">Modal title</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        ...
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+</body>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+
+const socket = io()
+
+const ID = Math.floor(Math.random() * 10000)
+document.getElementById('myid').innerHTML = ID
+
+
+const Peer = new RTCPeerConnection()
+const PeerCall = new RTCPeerConnection()
+let myoffer;
+
+Peer.addEventListener('addstream',(event)=> {
+	document.getElementById('remoteVideo').srcObject = event.stream
+})
+PeerCall.addEventListener('addstream',(event)=> {
+	document.getElementById('remoteVideo').srcObject = event.stream
+})
+
+
+
+async function handleICE(event) {
+	try {
+    if (event.candidate) {
+      // Send ICE candidate to the remote peer
+      const iceCandidate = new RTCIceCandidate(event.candidate);
+      socket.emit('sendICECandidate', { candidate: iceCandidate, FID:document.getElementById('id').value  });
+    }
+  } catch (error) {
+    console.error('Error adding ICE candidate:', error);
+  }
+}
+
+	Peer.onicecandidate = handleICE
+	PeerCall.onicecandidate = handleICE
+
+async function call() {
+	const friendID = document.getElementById('id')
+	const localStm = await navigator.mediaDevices.getDisplayMedia({video:true,audio:true}) || await navigator.mediaDevices.getUserMedia({video:true,audio:true})
+	document.getElementById('localVideo').srcObject = localStm
+	await Peer.addStream(localStm)
+	const offer = await Peer.createOffer()
+	myoffer = offer
+	socket.emit('sendOffer',{offer,ID,FID:friendID.value})
+}
+
+socket.on(ID,async (data)=> {
+	await PeerCall.setRemoteDescription(data.offer)
+	const remoteStm = await navigator.mediaDevices.getDisplayMedia({video:true,audio:true})  || await navigator.mediaDevices.getUserMedia({video:true,audio:true})
+	document.getElementById('localVideo').srcObject = remoteStm
+	await PeerCall.addStream(remoteStm)
+	const ans = await PeerCall.createAnswer()
+	await PeerCall.setLocalDescription(ans)
+	socket.emit('sendAnswer',{ans,FID:data.ID})
+})
+
+socket.on('Answer'+ID,async (data)=> {
+	await Peer.setLocalDescription(myoffer)
+	await Peer.setRemoteDescription(data.ans)
+})
+
+socket.on('ICE'+ID,(data)=> {
+	PeerCall.addIceCandidate(data.candidate)
+})
+
+
+</script>
+</html>
