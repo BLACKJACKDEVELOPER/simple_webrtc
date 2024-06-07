@@ -26,6 +26,9 @@ io.on('connection', (socket) => {
   })
 });
 
+// use for directive instead of server
+
+
 server.listen(3000, () => {
   console.log('listening on *:3000');
 });
